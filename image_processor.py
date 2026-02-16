@@ -130,19 +130,13 @@ class ImageProcessor:
         self._add_step_thumbnail("Sharpened", sharpened)
         return sharpened
 
-    def resize_for_ocr(self, image: np.ndarray, target_height: int = 1200) -> np.ndarray:
-        """Resize image to optimal size for OCR (memory-optimized for cloud)."""
+    def resize_for_ocr(self, image: np.ndarray, target_height: int = 2000) -> np.ndarray:
+        """Resize image to optimal size for OCR."""
         h, w = image.shape[:2]
         if h < target_height:
             scale = target_height / h
             new_w = int(w * scale)
             resized = cv2.resize(image, (new_w, target_height), interpolation=cv2.INTER_CUBIC)
-            return resized
-        elif h > 1800:
-            # Downscale very large images to save memory
-            scale = 1800 / h
-            new_w = int(w * scale)
-            resized = cv2.resize(image, (new_w, 1800), interpolation=cv2.INTER_AREA)
             return resized
         return image
 
