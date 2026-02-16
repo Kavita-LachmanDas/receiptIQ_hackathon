@@ -15,6 +15,7 @@ try:
 except ImportError:
     pass  # python-dotenv not required on cloud
 
+import gc
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -937,6 +938,10 @@ if not st.session_state.processed:
                 ocr = get_ocr_engine()
                 ocr_results = ocr.process_image(processed_images)
                 results["ocr_results"] = ocr_results
+                # Free heavy image arrays after OCR is done
+                del processed_images["thresholded"]
+                del processed_images["final_for_ocr"]
+                gc.collect()
             except Exception as e:
                 st.error(f"OCR error: {e}")
                 st.stop()

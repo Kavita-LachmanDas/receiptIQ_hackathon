@@ -140,26 +140,12 @@ class OCREngine:
     def process_image(self, processed_images: dict) -> dict:
         """
         Full OCR pipeline on preprocessed images.
-        Tries multiple preprocessing variants and picks best result.
+        Uses single-pass OCR on the best preprocessed image to save memory.
         """
-        final_image = processed_images["final_for_ocr"]
-        results_final = self.extract_text(final_image)
-
-        thresh_image = processed_images["thresholded"]
-        results_thresh = self.extract_text(thresh_image)
-
-        stats_final = self.get_confidence_stats(results_final)
-        stats_thresh = self.get_confidence_stats(results_thresh)
-
-        if (len(results_final) >= len(results_thresh) and
-                stats_final["mean"] >= stats_thresh.get("mean", 0)):
-            best_results = results_final
-            best_stats = stats_final
-            used_image = final_image
-        else:
-            best_results = results_thresh
-            best_stats = stats_thresh
-            used_image = thresh_image
+        # Use sharpened image (best balance of quality vs memory)
+        ocr_image = processed_images["final_for_ocr"]
+        best_results = self.extract_text(ocr_image)
+        best_stats = self.get_confidence_stats(best_results)
 
         lines = self._group_into_lines(best_results)
         raw_text = "\n".join(lines)
@@ -174,5 +160,5 @@ class OCREngine:
             "detailed_results": best_results,
             "confidence_stats": best_stats,
             "visualization": vis_image,
-            "ocr_image_used": used_image
+            "ocr_image_used": ocr_image
         }
