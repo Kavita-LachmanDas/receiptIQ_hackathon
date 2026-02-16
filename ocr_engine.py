@@ -1,25 +1,38 @@
 """
 OCR Engine Module
 Extracts text from preprocessed receipt images using EasyOCR.
+Uses @st.cache_resource to cache the heavy EasyOCR model across reruns.
 """
 
 import os
 import numpy as np
 import cv2
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
+
+# Cache the EasyOCR reader globally so it survives Streamlit reruns
+# and doesn't reload 200MB+ models every time
+_cached_reader = None
+
+
+def _get_cached_reader(languages: Tuple[str, ...] = ('en',)):
+    """Get or create a cached EasyOCR reader instance."""
+    global _cached_reader
+    if _cached_reader is None:
+        import easyocr
+        _cached_reader = easyocr.Reader(list(languages), gpu=False, verbose=False)
+    return _cached_reader
 
 
 class OCREngine:
     """Optical Character Recognition engine for receipt text extraction."""
 
     def __init__(self, languages: List[str] = None):
-        """Initialize OCR reader."""
+        """Initialize OCR reader with cached model."""
         if languages is None:
             languages = ['en']
-        import easyocr
-        self.reader = easyocr.Reader(languages, gpu=False, verbose=False)
+        self.reader = _get_cached_reader(tuple(languages))
 
     def extract_text(self, image: np.ndarray) -> List[dict]:
         """

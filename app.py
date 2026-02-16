@@ -45,6 +45,13 @@ from analyzer import SpendingAnalyzer
 from llm_advisor import LLMAdvisor
 from email_alerter import EmailAlerter
 
+
+@st.cache_resource(show_spinner="Loading OCR engine (first time may take a minute)...")
+def get_ocr_engine():
+    """Cache the OCR engine so heavy models load only once."""
+    return OCREngine()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
@@ -807,15 +814,7 @@ with st.sidebar:
     <hr style="border-color: #334155; margin: 1rem 0;">
     """, unsafe_allow_html=True)
 
-    # API Key Status (loaded from .env file)
-    st.markdown("##### 🔑 Gemini API Key")
     api_key = os.getenv("GOOGLE_API_KEY", "")
-    if api_key and api_key != "YOUR_API_KEY_HERE":
-        st.success("API Key loaded from .env file!")
-    else:
-        st.warning("Set GOOGLE_API_KEY in .env file for AI advice.")
-
-    st.markdown("<hr style='border-color: #334155; margin: 1rem 0;'>", unsafe_allow_html=True)
 
     # Email Alert Settings
     st.markdown("##### 📧 Email Alerts")
@@ -935,7 +934,7 @@ if not st.session_state.processed:
             progress_bar.progress(25, text="Step 2/7 - Extracting text with OCR...")
             st.session_state.pipeline_step = 2
             try:
-                ocr = OCREngine()
+                ocr = get_ocr_engine()
                 ocr_results = ocr.process_image(processed_images)
                 results["ocr_results"] = ocr_results
             except Exception as e:
@@ -1362,10 +1361,6 @@ if st.session_state.processed and st.session_state.results:
             st.markdown("""
             <div class="ai-badge">🤖 POWERED BY GOOGLE GEMINI</div>
             """, unsafe_allow_html=True)
-        elif llm_results.get("status") == "fallback":
-            st.info("💡 " + llm_results.get("message", "Using built-in analysis"))
-        else:
-            st.warning("⚠️ " + llm_results.get("message", "AI advice unavailable"))
 
         # Advice content
         st.markdown(f"""
