@@ -5,10 +5,15 @@ Main Streamlit Application - Hackathon Project
 
 import os
 import io
-from dotenv import load_dotenv
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
-load_dotenv()  # Load API key from .env file
+
+# Load from .env locally; on Streamlit Cloud use st.secrets
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not required on cloud
 
 import streamlit as st
 import pandas as pd
@@ -17,8 +22,19 @@ import plotly.graph_objects as go
 import numpy as np
 import cv2
 import time
-import os
 from PIL import Image
+
+# Bridge st.secrets → os.environ so all modules can use os.getenv()
+def _load_secrets():
+    """Load Streamlit Cloud secrets into environment variables."""
+    try:
+        for key in st.secrets:
+            if isinstance(st.secrets[key], str):
+                os.environ.setdefault(key, st.secrets[key])
+    except Exception:
+        pass  # No secrets configured
+
+_load_secrets()
 
 # Import our modules
 from image_processor import ImageProcessor

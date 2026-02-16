@@ -4,8 +4,6 @@ Extracts text from preprocessed receipt images using EasyOCR.
 """
 
 import os
-import sys
-import contextlib
 import numpy as np
 import cv2
 from typing import List, Dict
@@ -13,46 +11,22 @@ from typing import List, Dict
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 
-@contextlib.contextmanager
-def _safe_stdout():
-    """Temporarily redirect stdout/stderr to devnull to avoid encoding crashes on Windows."""
-    old_out = sys.stdout
-    old_err = sys.stderr
-    try:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")
-        yield
-    finally:
-        try:
-            sys.stdout.close()
-        except Exception:
-            pass
-        try:
-            sys.stderr.close()
-        except Exception:
-            pass
-        sys.stdout = old_out
-        sys.stderr = old_err
-
-
 class OCREngine:
     """Optical Character Recognition engine for receipt text extraction."""
 
     def __init__(self, languages: List[str] = None):
-        """Initialize OCR reader with safe stdout redirection."""
+        """Initialize OCR reader."""
         if languages is None:
             languages = ['en']
-        with _safe_stdout():
-            import easyocr
-            self.reader = easyocr.Reader(languages, gpu=False, verbose=False)
+        import easyocr
+        self.reader = easyocr.Reader(languages, gpu=False, verbose=False)
 
     def extract_text(self, image: np.ndarray) -> List[dict]:
         """
         Extract text from image with bounding box information.
         Returns list of dicts with text, confidence, and position.
         """
-        with _safe_stdout():
-            results = self.reader.readtext(image)
+        results = self.reader.readtext(image)
 
         extracted = []
         for (bbox, text, confidence) in results:
