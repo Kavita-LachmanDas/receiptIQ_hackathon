@@ -27,6 +27,7 @@ from data_parser import DataParser
 from categorizer import ExpenseCategorizer
 from analyzer import SpendingAnalyzer
 from llm_advisor import LLMAdvisor
+from email_alerter import EmailAlerter
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -571,6 +572,7 @@ def render_pipeline_steps(current_step=0):
         ("Categorization", "Classifying expenses"),
         ("Analysis", "Spending patterns & anomalies"),
         ("AI Insights", "Personalized financial advice"),
+        ("Email Alerts", "Overspending notifications"),
     ]
 
     for i, (title, desc) in enumerate(steps):
@@ -799,6 +801,29 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color: #334155; margin: 1rem 0;'>", unsafe_allow_html=True)
 
+    # Email Alert Settings
+    st.markdown("##### 📧 Email Alerts")
+    email_alerter = EmailAlerter()
+    if email_alerter.is_configured():
+        st.success("Email configured! Alerts will be sent automatically.")
+    else:
+        st.warning("Set SENDER_EMAIL & SENDER_APP_PASSWORD in .env for email alerts.")
+
+    alert_email = st.text_input(
+        "Recipient Email",
+        placeholder="yourname@email.com",
+        help="Enter the email address to receive overspending alerts"
+    )
+    alert_name = st.text_input(
+        "Your Name",
+        placeholder="John Doe",
+        help="Name to personalize the alert email"
+    )
+    email_alerts_enabled = st.toggle("Enable Auto Email Alerts", value=True,
+                                      help="Automatically send email when overspending is detected")
+
+    st.markdown("<hr style='border-color: #334155; margin: 1rem 0;'>", unsafe_allow_html=True)
+
     # Pipeline Status
     st.markdown("##### ⚙️ Processing Pipeline")
     render_pipeline_steps(st.session_state.pipeline_step if st.session_state.processed else 0)
@@ -880,7 +905,7 @@ if not st.session_state.processed:
             results = {}
 
             # Step 1: Image Processing
-            progress_bar.progress(10, text="Step 1/6 - Preprocessing image...")
+            progress_bar.progress(10, text="Step 1/7 - Preprocessing image...")
             st.session_state.pipeline_step = 1
             try:
                 processor = ImageProcessor()
@@ -891,7 +916,7 @@ if not st.session_state.processed:
                 st.stop()
 
             # Step 2: OCR
-            progress_bar.progress(30, text="Step 2/6 - Extracting text with OCR...")
+            progress_bar.progress(25, text="Step 2/7 - Extracting text with OCR...")
             st.session_state.pipeline_step = 2
             try:
                 ocr = OCREngine()
@@ -902,7 +927,7 @@ if not st.session_state.processed:
                 st.stop()
 
             # Step 3: Data Parsing
-            progress_bar.progress(50, text="Step 3/6 - Parsing receipt data...")
+            progress_bar.progress(40, text="Step 3/7 - Parsing receipt data...")
             st.session_state.pipeline_step = 3
             try:
                 parser = DataParser()
@@ -916,7 +941,7 @@ if not st.session_state.processed:
                 st.stop()
 
             # Step 4: Categorization
-            progress_bar.progress(65, text="Step 4/6 - Categorizing expenses...")
+            progress_bar.progress(55, text="Step 4/7 - Categorizing expenses...")
             st.session_state.pipeline_step = 4
             try:
                 categorizer = ExpenseCategorizer()
@@ -927,7 +952,7 @@ if not st.session_state.processed:
                 st.stop()
 
             # Step 5: Analysis
-            progress_bar.progress(80, text="Step 5/6 - Analyzing spending patterns...")
+            progress_bar.progress(70, text="Step 5/7 - Analyzing spending patterns...")
             st.session_state.pipeline_step = 5
             try:
                 detected_currency = parsed_data.get("currency", "$")
@@ -939,7 +964,7 @@ if not st.session_state.processed:
                 st.stop()
 
             # Step 6: LLM Advice
-            progress_bar.progress(90, text="Step 6/6 - Generating AI insights...")
+            progress_bar.progress(85, text="Step 6/7 - Generating AI insights...")
             st.session_state.pipeline_step = 6
             try:
                 advisor = LLMAdvisor(api_key=api_key if api_key else None)
@@ -952,12 +977,35 @@ if not st.session_state.processed:
                     "message": str(e)
                 }
 
+            # Step 7: Email Alert (if overspending detected)
+            progress_bar.progress(95, text="Step 7/7 - Checking for overspending alerts...")
+            st.session_state.pipeline_step = 7
+            email_result = {"sent": False, "message": "Email alerts disabled or no overspending detected."}
+
+            if email_alerts_enabled and alert_email and email_alerter.is_configured():
+                if email_alerter.should_send_alert(analysis_data):
+                    email_result = email_alerter.send_alert(
+                        recipient_email=alert_email,
+                        recipient_name=alert_name or "User",
+                        categorization_data=categorization_data,
+                        analysis_data=analysis_data,
+                        currency=detected_currency
+                    )
+                else:
+                    email_result = {"success": True, "message": "No overspending detected. No alert needed."}
+            elif email_alerts_enabled and alert_email and not email_alerter.is_configured():
+                email_result = {"success": False, "message": "Email SMTP not configured in .env file."}
+            elif email_alerts_enabled and not alert_email:
+                email_result = {"success": False, "message": "No recipient email provided."}
+
+            results["email_result"] = email_result
+
             progress_bar.progress(100, text="Analysis complete!")
             time.sleep(0.5)
 
             st.session_state.results = results
             st.session_state.processed = True
-            st.session_state.pipeline_step = 6
+            st.session_state.pipeline_step = 7
             st.rerun()
 
 
@@ -979,6 +1027,36 @@ if st.session_state.processed and st.session_state.results:
     category_percentages = categorization_data.get("category_percentages", {})
     categorized_items = categorization_data.get("categorized_items", [])
     currency = parsed_data.get("currency", "$")
+
+    # ── EMAIL ALERT STATUS ──
+    email_result = results.get("email_result", {})
+    if email_result:
+        if email_result.get("success") is True and "sent successfully" in email_result.get("message", ""):
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #065F46, #047857); border-radius: 12px; 
+                        padding: 1rem 1.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 12px;
+                        border: 1px solid #10B981;">
+                <span style="font-size: 1.5rem;">📧✅</span>
+                <div>
+                    <div style="color: #ECFDF5; font-weight: 700; font-size: 0.95rem;">Overspending Alert Email Sent!</div>
+                    <div style="color: #A7F3D0; font-size: 0.85rem;">{email_result.get('message', '')}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        elif email_result.get("success") is False and "No overspending" not in email_result.get("message", ""):
+            msg = email_result.get("message", "")
+            if "not configured" not in msg.lower() and "no recipient" not in msg.lower() and "disabled" not in msg.lower():
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #7F1D1D, #991B1B); border-radius: 12px; 
+                            padding: 1rem 1.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 12px;
+                            border: 1px solid #EF4444;">
+                    <span style="font-size: 1.5rem;">📧❌</span>
+                    <div>
+                        <div style="color: #FEF2F2; font-weight: 700; font-size: 0.95rem;">Email Alert Failed</div>
+                        <div style="color: #FECACA; font-size: 0.85rem;">{msg}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
     # ── TOP METRICS ──
     cols = st.columns(5)
@@ -1171,8 +1249,38 @@ if st.session_state.processed and st.session_state.results:
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
+            # Manual email send button
+            st.markdown("")
+            send_col1, send_col2 = st.columns([2, 1])
+            with send_col1:
+                manual_email = st.text_input(
+                    "📧 Send alert to email:",
+                    value=alert_email if alert_email else "",
+                    key="manual_alert_email",
+                    placeholder="yourname@email.com"
+                )
+            with send_col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🚨 Send Alert Email Now", use_container_width=True, type="primary"):
+                    if manual_email and email_alerter.is_configured():
+                        with st.spinner("📧 Sending overspending alert..."):
+                            result = email_alerter.send_alert(
+                                recipient_email=manual_email,
+                                recipient_name=alert_name or "User",
+                                categorization_data=categorization_data,
+                                analysis_data=analysis_data,
+                                currency=currency
+                            )
+                            if result.get("success"):
+                                st.success(f"✅ {result['message']}")
+                            else:
+                                st.error(f"❌ {result['message']}")
+                    elif not email_alerter.is_configured():
+                        st.error("❌ Email not configured. Set SENDER_EMAIL & SENDER_APP_PASSWORD in .env")
+                    else:
+                        st.warning("⚠️ Please enter a recipient email address.")
         else:
-            st.success("✅ No significant overspending detected!")
+            st.success("✅ No significant overspending detected! No alert needed.")
 
         # Price Anomalies
         anomalies = analysis_data.get("price_anomalies", [])
